@@ -28,7 +28,7 @@ MONGO_URI = os.getenv("MONGO_URI", "mongodb://admin:admin123@localhost:27017/")
 DB_NAME = "music_classifier"
 COLLECTION_NAME = "tracks"
 
-DATASET_ROOT = Path("dataset")
+DATASET_ROOT = Path(__file__).resolve().parent.parent / "dataset"
 
 # Caminho explícito para o ffmpeg (necessário quando o WinGet Links não está no PATH do subprocess)
 FFMPEG_PATH = os.getenv("FFMPEG_PATH", r"C:\Users\groun\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe")

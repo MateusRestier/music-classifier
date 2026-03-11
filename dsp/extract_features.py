@@ -48,7 +48,7 @@ N_MFCC = 40
 N_MELS = 128
 HOP_LENGTH = 512
 
-DEFAULT_OUTPUT = Path("features.parquet")
+DEFAULT_OUTPUT = Path(__file__).resolve().parent.parent / "features.parquet"
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "4"))
 
 
@@ -166,9 +166,19 @@ def get_tracks(collection: Collection) -> list[dict]:
     ))
 
 
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
 def _process_track(track: dict) -> dict | None:
     """Extrai features de uma faixa. Retorna None em caso de erro."""
     file_path = Path(track["file_path"])
+    if not file_path.is_absolute():
+        # Tenta resolver relativo à raiz do projeto; fallback para o diretório pai
+        # (caso o ingest tenha sido rodado de fora da pasta music-classifier/)
+        candidate = _PROJECT_ROOT / file_path
+        if not candidate.exists():
+            candidate = _PROJECT_ROOT.parent / file_path
+        file_path = candidate
     if not file_path.exists():
         logger.warning("  [SKIP] Arquivo não encontrado: %s", file_path)
         return None

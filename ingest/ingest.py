@@ -12,6 +12,8 @@ Pré-requisitos:
 
 import os
 import subprocess
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -30,6 +32,11 @@ DATASET_ROOT = Path("dataset")
 
 # Caminho explícito para o ffmpeg (necessário quando o WinGet Links não está no PATH do subprocess)
 FFMPEG_PATH = os.getenv("FFMPEG_PATH", r"C:\Users\groun\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe")
+
+# Número de downloads simultâneos (ajuste conforme sua banda/CPU)
+MAX_WORKERS = int(os.getenv("MAX_WORKERS", "4"))
+
+_print_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # Catálogo de músicas a baixar
@@ -167,25 +174,28 @@ def download_audio(url: str, output_path: Path) -> bool:
         url,
     ]
 
-    print(f"  [DOWN] {url}")
+    with _print_lock:
+        print(f"  [DOWN] {url}")
     result = subprocess.run(cmd, capture_output=True)
 
     if result.returncode != 0:
-        print(f"  [ERR]  yt-dlp falhou:\n{result.stderr.decode('utf-8', errors='replace')}")
+        with _print_lock:
+            print(f"  [ERR]  yt-dlp falhou:\n{result.stderr.decode('utf-8', errors='replace')}")
         return False
 
     # yt-dlp pode gerar o arquivo com extensão diferente; normaliza para .wav
     generated = output_path.with_suffix("").with_suffix(".wav")
     if not generated.exists():
-        # tenta encontrar qualquer arquivo gerado com mesmo stem
         candidates = list(output_path.parent.glob(f"{output_path.stem}*"))
         if candidates:
             candidates[0].rename(output_path)
         else:
-            print(f"  [ERR]  Arquivo de saída não encontrado após download.")
+            with _print_lock:
+                print(f"  [ERR]  Arquivo de saída não encontrado após download.")
             return False
 
-    print(f"  [OK]   Salvo em: {output_path}")
+    with _print_lock:
+        print(f"  [OK]   Salvo em: {output_path}")
     return True
 
 
@@ -202,7 +212,8 @@ def upsert_track(collection: Collection, title: str, url: str, label: str, file_
         "downloaded_at": datetime.now(timezone.utc),
     }
     collection.update_one({"url": url}, {"$set": doc}, upsert=True)
-    print(f"  [DB]   Metadados salvos: {title!r} → {label}")
+    with _print_lock:
+        print(f"  [DB]   Metadados salvos: {title!r} → {label}")
 
 
 def resolve_tracks(entries: list[dict], seen_ids: set[str]) -> list[dict]:
@@ -228,8 +239,19 @@ def resolve_tracks(entries: list[dict], seen_ids: set[str]) -> list[dict]:
     return resolved
 
 
+def _process_track(track: dict, label: str, collection: Collection) -> bool:
+    """Baixa uma faixa e salva os metadados. Executado em thread."""
+    title = track["title"]
+    url = track["url"]
+    output_path = build_output_path(label, title)
+    success = download_audio(url, output_path)
+    if success:
+        upsert_track(collection, title, url, label, output_path)
+    return success
+
+
 def run_ingestion(catalog: dict[str, list[dict]]) -> None:
-    """Processa o catálogo completo: download + inserção no MongoDB."""
+    """Processa o catálogo completo com downloads paralelos."""
     collection = get_collection()
 
     if not any(catalog.values()):
@@ -238,34 +260,54 @@ def run_ingestion(catalog: dict[str, list[dict]]) -> None:
 
     # IDs já persistidos no banco (execuções anteriores)
     known_ids = load_known_video_ids(collection)
-    print(f"[INFO] {len(known_ids)} faixa(s) já registrada(s) no banco.\n")
+    print(f"[INFO] {len(known_ids)} faixa(s) já registrada(s) no banco.")
+    print(f"[INFO] Paralelismo: {MAX_WORKERS} workers simultâneos.\n")
 
     # IDs vistos nesta sessão (evita duplicatas entre playlists do mesmo run)
     seen_ids: set[str] = set(known_ids)
 
+    # Coleta todas as faixas novas de todas as categorias antes de baixar
+    all_tasks: list[tuple[dict, str]] = []
     for label, entries in catalog.items():
         if not entries:
             continue
-
         tracks = resolve_tracks(entries, seen_ids)
-
         if not tracks:
-            print(f"\n=== Categoria: {label} — nenhuma faixa nova. ===")
+            print(f"  [SKIP] {label}: nenhuma faixa nova.")
             continue
+        print(f"  [QUEUE] {label}: {len(tracks)} faixa(s) na fila.")
+        all_tasks.extend((track, label) for track in tracks)
 
-        print(f"\n=== Categoria: {label} ({len(tracks)} faixa(s) nova(s)) ===")
+    if not all_tasks:
+        print("\nNenhuma faixa nova para baixar.")
+        return
 
-        for track in tracks:
-            title = track["title"]
-            url = track["url"]
-            output_path = build_output_path(label, title)
+    total = len(all_tasks)
+    done = 0
+    errors = 0
 
-            success = download_audio(url, output_path)
-            if success:
-                upsert_track(collection, title, url, label, output_path)
-            print()
+    print(f"\n[START] Baixando {total} faixa(s) com {MAX_WORKERS} workers...\n")
 
-    print("Ingestão concluída.")
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {
+            executor.submit(_process_track, track, label, collection): (track["title"], label)
+            for track, label in all_tasks
+        }
+        for future in as_completed(futures):
+            title, label = futures[future]
+            try:
+                success = future.result()
+            except Exception as exc:
+                with _print_lock:
+                    print(f"  [ERR]  Exceção em {title!r}: {exc}")
+                errors += 1
+            else:
+                done += 1 if success else 0
+                errors += 0 if success else 1
+            with _print_lock:
+                print(f"  [PROG] {done + errors}/{total} concluídos ({errors} erro(s))\n")
+
+    print(f"Ingestão concluída. {done} baixadas, {errors} erro(s).")
 
 
 # ---------------------------------------------------------------------------

@@ -42,21 +42,24 @@ Conexão: `mongodb://admin:admin123@localhost:27017/`
 
 ### 4. Configurar e rodar a ingestão
 
-Abra [ingest/ingest.py](ingest/ingest.py) e preencha o dicionário `CATALOG` com seus títulos e URLs do YouTube:
+Abra [ingest/ingest.py](ingest/ingest.py) e preencha o dicionário `CATALOG`. Cada categoria aceita **vídeos individuais**, **playlists inteiras** ou ambos misturados:
 
 ```python
 CATALOG = {
     "metalcore": [
-        {"title": "Architects - Doomsday", "url": "https://www.youtube.com/watch?v=..."},
+        # Playlist inteira — títulos extraídos automaticamente do YouTube
+        {"playlist": "https://www.youtube.com/playlist?list=..."},
     ],
     "nu_metal": [
+        # Vídeo individual — título definido manualmente
         {"title": "Linkin Park - In The End", "url": "https://www.youtube.com/watch?v=..."},
-    ],
-    "sertanejo": [
-        {"title": "Exemplo - Nome da Música", "url": "https://www.youtube.com/watch?v=..."},
+        # Pode misturar playlist e vídeos individuais na mesma categoria
+        {"playlist": "https://www.youtube.com/playlist?list=..."},
     ],
 }
 ```
+
+O script deduplica automaticamente: a mesma música não será baixada duas vezes, mesmo que apareça em playlists diferentes ou em execuções anteriores.
 
 Depois execute:
 

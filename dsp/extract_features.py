@@ -2,10 +2,15 @@
 extract_features.py — Extração de features de áudio via librosa.
 
 Uso:
-    python dsp/extract_features.py [--workers N] [--output PATH] [--balance-strategy S]
+    python dsp/extract_features.py [--workers N] [--output PATH] [--balance-strategy S] [--labels L]
 
 Lê os caminhos dos arquivos .wav do MongoDB, extrai features numéricas
 e salva um DataFrame em features.parquet (uma linha por faixa).
+
+Filtro de labels (LABELS no .env ou --labels):
+    Vazio (padrão)  Processa todos os gêneros presentes no banco
+    "a,b,c"         Processa apenas os labels listados (separados por vírgula)
+    Exemplo: LABELS=metalcore,nu_metal,pop
 
 Estratégias de balanceamento (BALANCE_STRATEGY no .env ou --balance-strategy):
     none         Processa todas as faixas (padrão)
@@ -60,6 +65,7 @@ DEFAULT_OUTPUT = Path(__file__).resolve().parent.parent / "features.parquet"
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "4"))
 CHECKPOINT_EVERY = int(os.getenv("CHECKPOINT_EVERY", "50"))
 BALANCE_STRATEGY = os.getenv("BALANCE_STRATEGY", "none")  # none | undersample | balance
+LABELS = os.getenv("LABELS", "")  # csv de labels; vazio = todos os gêneros
 
 
 # ---------------------------------------------------------------------------
@@ -168,10 +174,22 @@ def extract_features_from_wav(file_path: str | Path) -> dict:
 # Pipeline
 # ---------------------------------------------------------------------------
 
-def get_tracks(collection: Collection) -> list[dict]:
-    """Retorna todas as faixas do MongoDB que têm file_path registrado."""
+def _parse_labels(raw: str) -> list[str] | None:
+    """Converte 'a,b,c' em ['a','b','c']. Retorna None se vazio (= sem filtro)."""
+    items = [s.strip() for s in raw.split(",") if s.strip()]
+    return items if items else None
+
+
+def get_tracks(collection: Collection, labels: list[str] | None = None) -> list[dict]:
+    """Retorna faixas do MongoDB que têm file_path registrado.
+
+    Se labels for fornecido, filtra apenas os gêneros listados.
+    """
+    query: dict = {"file_path": {"$ne": ""}}
+    if labels:
+        query["label"] = {"$in": labels}
     return list(collection.find(
-        {"file_path": {"$ne": ""}},
+        query,
         {"_id": 0, "title": 1, "url": 1, "label": 1, "file_path": 1},
     ))
 
@@ -263,13 +281,19 @@ def _flush_checkpoint(
 
 
 def run_extraction(
-    output_path: Path, max_workers: int, checkpoint_every: int, balance_strategy: str
+    output_path: Path, max_workers: int, checkpoint_every: int,
+    balance_strategy: str, labels: list[str] | None = None,
 ) -> None:
-    """Pipeline principal: lê MongoDB → aplica balanceamento → extrai features → salva parquet."""
+    """Pipeline principal: lê MongoDB → filtra labels → aplica balanceamento → extrai features → salva parquet."""
     client = MongoClient(MONGO_URI)
     collection = client[DB_NAME][COLLECTION_NAME]
 
-    all_tracks = get_tracks(collection)
+    if labels:
+        logger.info("[FILTER] Labels selecionados: %s", ", ".join(labels))
+    else:
+        logger.info("[FILTER] Nenhum filtro de label — processando todos os gêneros.")
+
+    all_tracks = get_tracks(collection, labels)
     logger.info("[INFO] %d faixa(s) encontrada(s) no banco.", len(all_tracks))
 
     all_tracks = _apply_balance_strategy(all_tracks, balance_strategy)
@@ -367,6 +391,14 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["none", "undersample", "balance"],
         help=f"Estratégia de balanceamento de classes (padrão: {BALANCE_STRATEGY}, env: BALANCE_STRATEGY)",
     )
+    parser.add_argument(
+        "--labels", "-l", default=LABELS,
+        help=(
+            "Labels a incluir, separados por vírgula. "
+            f"Vazio = todos os gêneros (padrão: '{LABELS}', env: LABELS). "
+            "Exemplo: --labels metalcore,nu_metal,pop"
+        ),
+    )
     return parser
 
 
@@ -377,4 +409,5 @@ if __name__ == "__main__":
         max_workers=args.workers,
         checkpoint_every=args.checkpoint_every,
         balance_strategy=args.balance_strategy,
+        labels=_parse_labels(args.labels),
     )

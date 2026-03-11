@@ -4,6 +4,19 @@ Formato: [MAJOR.MINOR] — descrição das mudanças agrupadas por etapa/sessão
 
 ---
 
+## [0.5] — 2026-03-11 — Filtro de labels na extração de features
+
+### Adicionado
+- `dsp/extract_features.py`: variável `LABELS` para filtrar gêneros incluídos no parquet
+  - Vazio (padrão) = todos os gêneros do banco
+  - Lista CSV: `LABELS=metalcore,nu_metal,pop` — inclui apenas os listados
+  - Filtragem feita diretamente na query do MongoDB (`$in`)
+  - Configurável via env `LABELS` ou CLI `--labels` / `-l`
+  - Helper `_parse_labels(raw)`: faz strip dos espaços, retorna `None` se vazio (= sem filtro)
+- `.env.example`: adicionada variável `LABELS=` com comentários explicativos
+
+---
+
 ## [0.4] — 2026-03-11 — Etapa 3: Modelagem + Balanceamento de classes
 
 ### Adicionado

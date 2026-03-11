@@ -92,6 +92,26 @@ def cmd_list(args, col: Collection) -> None:
         print(f"     {doc.get('file_path', '—')}\n")
 
 
+def cmd_search(args, col: Collection) -> None:
+    """Busca faixas pelo título (correspondência parcial, sem diferenciar maiúsculas)."""
+    import re
+    pattern = re.compile(re.escape(args.query), re.IGNORECASE)
+    query: dict = {"title": {"$regex": pattern.pattern, "$options": "i"}}
+    if args.label:
+        query["label"] = args.label
+
+    docs = list(col.find(query, {"_id": 0}).limit(args.limit or 0))
+
+    if not docs:
+        print(f'Nenhuma faixa encontrada para "{args.query}".')
+        return
+
+    print(f'\n{len(docs)} resultado(s) para "{args.query}":\n')
+    for i, doc in enumerate(docs, 1):
+        print(f"[{i}] {doc.get('title', '—')}  |  {doc.get('label', '—')}")
+        print(f"     {doc.get('url', '—')}\n")
+
+
 def cmd_get(args, col: Collection) -> None:
     """Exibe detalhes completos de uma faixa pela URL."""
     doc = col.find_one({"url": args.url}, {"_id": 0})
@@ -191,6 +211,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_list.add_argument("--label", "-l", help="Filtrar por label (ex: metalcore)")
     p_list.add_argument("--limit", "-n", type=int, default=50, help="Máximo de resultados (padrão: 50)")
 
+    # search
+    p_search = sub.add_parser("search", help="Busca faixas por trecho do título")
+    p_search.add_argument("query", help='Trecho a buscar (ex: "the end")')
+    p_search.add_argument("--label", "-l", help="Restringir busca a um label")
+    p_search.add_argument("--limit", "-n", type=int, default=20, help="Máximo de resultados (padrão: 20)")
+
     # get
     p_get = sub.add_parser("get", help="Detalhes de uma faixa pela URL")
     p_get.add_argument("url", help="URL do YouTube da faixa")
@@ -227,6 +253,7 @@ def build_parser() -> argparse.ArgumentParser:
 COMMANDS = {
     "stats": cmd_stats,
     "list": cmd_list,
+    "search": cmd_search,
     "get": cmd_get,
     "add": cmd_add,
     "update": cmd_update,

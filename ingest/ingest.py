@@ -10,9 +10,9 @@ Pré-requisitos:
     - pip install -r requirements.txt
 """
 
+import logging
 import os
 import subprocess
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,9 +34,37 @@ DATASET_ROOT = Path("dataset")
 FFMPEG_PATH = os.getenv("FFMPEG_PATH", r"C:\Users\groun\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe")
 
 # Número de downloads simultâneos (ajuste conforme sua banda/CPU)
-MAX_WORKERS = int(os.getenv("MAX_WORKERS", "4"))
+MAX_WORKERS = int(os.getenv("MAX_WORKERS", "6"))
 
-_print_lock = threading.Lock()
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
+def _setup_logging(script_name: str) -> logging.Logger:
+    logs_dir = Path(__file__).resolve().parent.parent / "logs"
+    logs_dir.mkdir(exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = logs_dir / f"{script_name}_{timestamp}.log"
+
+    _logger = logging.getLogger(script_name)
+    _logger.setLevel(logging.DEBUG)
+
+    file_fmt = logging.Formatter(
+        "%(asctime)s | %(levelname)-8s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    fh = logging.FileHandler(log_file, encoding="utf-8")
+    fh.setFormatter(file_fmt)
+    _logger.addHandler(fh)
+
+    sh = logging.StreamHandler()
+    sh.setFormatter(logging.Formatter("%(message)s"))
+    _logger.addHandler(sh)
+
+    return _logger
+
+
+logger = _setup_logging("ingest")
 
 # ---------------------------------------------------------------------------
 # Catálogo de músicas a baixar
@@ -126,11 +154,15 @@ def expand_playlist(playlist_url: str) -> list[dict]:
         "--print", "%(id)s\t%(title)s",  # tab-separated: id <TAB> título
         playlist_url,
     ]
-    print(f"  [LIST] Expandindo playlist: {playlist_url}")
-    result = subprocess.run(cmd, capture_output=True)
+    logger.info("  [LIST] Expandindo playlist: %s", playlist_url)
+    env = {**os.environ, "PYTHONUTF8": "1"}
+    result = subprocess.run(cmd, capture_output=True, env=env)
 
     if result.returncode != 0:
-        print(f"  [ERR]  Falha ao expandir playlist:\n{result.stderr.decode('utf-8', errors='replace')}")
+        logger.error(
+            "  [ERR]  Falha ao expandir playlist:\n%s",
+            result.stderr.decode("utf-8", errors="replace"),
+        )
         return []
 
     stdout = result.stdout.decode("utf-8", errors="replace")
@@ -148,7 +180,7 @@ def expand_playlist(playlist_url: str) -> list[dict]:
                 "url": f"https://www.youtube.com/watch?v={video_id}",
             })
 
-    print(f"  [LIST] {len(tracks)} faixa(s) encontrada(s) na playlist.")
+    logger.info("  [LIST] %d faixa(s) encontrada(s) na playlist.", len(tracks))
     return tracks
 
 
@@ -158,7 +190,7 @@ def download_audio(url: str, output_path: Path) -> bool:
     Retorna True em caso de sucesso.
     """
     if output_path.exists():
-        print(f"  [SKIP] Arquivo já existe: {output_path}")
+        logger.info("  [SKIP] Arquivo já existe: %s", output_path)
         return True
 
     # yt-dlp baixa o melhor áudio disponível e ffmpeg converte para WAV PCM 16-bit
@@ -174,13 +206,15 @@ def download_audio(url: str, output_path: Path) -> bool:
         url,
     ]
 
-    with _print_lock:
-        print(f"  [DOWN] {url}")
-    result = subprocess.run(cmd, capture_output=True)
+    logger.info("  [DOWN] %s", url)
+    env = {**os.environ, "PYTHONUTF8": "1"}
+    result = subprocess.run(cmd, capture_output=True, env=env)
 
     if result.returncode != 0:
-        with _print_lock:
-            print(f"  [ERR]  yt-dlp falhou:\n{result.stderr.decode('utf-8', errors='replace')}")
+        logger.error(
+            "  [ERR]  yt-dlp falhou:\n%s",
+            result.stderr.decode("utf-8", errors="replace"),
+        )
         return False
 
     # yt-dlp pode gerar o arquivo com extensão diferente; normaliza para .wav
@@ -190,12 +224,10 @@ def download_audio(url: str, output_path: Path) -> bool:
         if candidates:
             candidates[0].rename(output_path)
         else:
-            with _print_lock:
-                print(f"  [ERR]  Arquivo de saída não encontrado após download.")
+            logger.error("  [ERR]  Arquivo de saída não encontrado após download.")
             return False
 
-    with _print_lock:
-        print(f"  [OK]   Salvo em: {output_path}")
+    logger.info("  [OK]   Salvo em: %s", output_path)
     return True
 
 
@@ -212,8 +244,7 @@ def upsert_track(collection: Collection, title: str, url: str, label: str, file_
         "downloaded_at": datetime.now(timezone.utc),
     }
     collection.update_one({"url": url}, {"$set": doc}, upsert=True)
-    with _print_lock:
-        print(f"  [DB]   Metadados salvos: {title!r} → {label}")
+    logger.info("  [DB]   Metadados salvos: %r → %s", title, label)
 
 
 def resolve_tracks(entries: list[dict], seen_ids: set[str]) -> list[dict]:
@@ -232,7 +263,7 @@ def resolve_tracks(entries: list[dict], seen_ids: set[str]) -> list[dict]:
         for track in candidates:
             vid_id = _extract_video_id(track["url"])
             if vid_id in seen_ids:
-                print(f"  [DUP]  Ignorado (já visto nesta sessão): {track['title']!r}")
+                logger.info("  [DUP]  Ignorado (já visto nesta sessão): %r", track["title"])
                 continue
             seen_ids.add(vid_id)
             resolved.append(track)
@@ -255,13 +286,13 @@ def run_ingestion(catalog: dict[str, list[dict]]) -> None:
     collection = get_collection()
 
     if not any(catalog.values()):
-        print("Catálogo vazio. Adicione entradas em CATALOG dentro de ingest.py.")
+        logger.warning("Catálogo vazio. Adicione entradas em CATALOG dentro de ingest.py.")
         return
 
     # IDs já persistidos no banco (execuções anteriores)
     known_ids = load_known_video_ids(collection)
-    print(f"[INFO] {len(known_ids)} faixa(s) já registrada(s) no banco.")
-    print(f"[INFO] Paralelismo: {MAX_WORKERS} workers simultâneos.\n")
+    logger.info("[INFO] %d faixa(s) já registrada(s) no banco.", len(known_ids))
+    logger.info("[INFO] Paralelismo: %d workers simultâneos.\n", MAX_WORKERS)
 
     # IDs vistos nesta sessão (evita duplicatas entre playlists do mesmo run)
     seen_ids: set[str] = set(known_ids)
@@ -273,20 +304,20 @@ def run_ingestion(catalog: dict[str, list[dict]]) -> None:
             continue
         tracks = resolve_tracks(entries, seen_ids)
         if not tracks:
-            print(f"  [SKIP] {label}: nenhuma faixa nova.")
+            logger.info("  [SKIP] %s: nenhuma faixa nova.", label)
             continue
-        print(f"  [QUEUE] {label}: {len(tracks)} faixa(s) na fila.")
+        logger.info("  [QUEUE] %s: %d faixa(s) na fila.", label, len(tracks))
         all_tasks.extend((track, label) for track in tracks)
 
     if not all_tasks:
-        print("\nNenhuma faixa nova para baixar.")
+        logger.info("\nNenhuma faixa nova para baixar.")
         return
 
     total = len(all_tasks)
     done = 0
     errors = 0
 
-    print(f"\n[START] Baixando {total} faixa(s) com {MAX_WORKERS} workers...\n")
+    logger.info("\n[START] Baixando %d faixa(s) com %d workers...\n", total, MAX_WORKERS)
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = {
@@ -298,16 +329,14 @@ def run_ingestion(catalog: dict[str, list[dict]]) -> None:
             try:
                 success = future.result()
             except Exception as exc:
-                with _print_lock:
-                    print(f"  [ERR]  Exceção em {title!r}: {exc}")
+                logger.error("  [ERR]  Exceção em %r: %s", title, exc)
                 errors += 1
             else:
                 done += 1 if success else 0
                 errors += 0 if success else 1
-            with _print_lock:
-                print(f"  [PROG] {done + errors}/{total} concluídos ({errors} erro(s))\n")
+            logger.info("  [PROG] %d/%d concluídos (%d erro(s))\n", done + errors, total, errors)
 
-    print(f"Ingestão concluída. {done} baixadas, {errors} erro(s).")
+    logger.info("Ingestão concluída. %d baixadas, %d erro(s).", done, errors)
 
 
 # ---------------------------------------------------------------------------

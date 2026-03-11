@@ -7,13 +7,16 @@ Uso:
 Comandos disponíveis:
     stats                          Contagem de faixas por label
     list   [--label L] [--limit N] Lista faixas (todas ou filtradas por label)
+    search <query> [--label L] [--limit N]  Busca faixas por trecho do título
     get    <url>                   Exibe os detalhes de uma faixa pela URL
     add    --title T --url U --label L [--file-path F]  Adiciona faixa manualmente
     update <url> [--label L] [--title T] [--file-path F]  Atualiza campos de uma faixa
     delete <url> [--delete-file]   Remove faixa do banco (e opcionalmente o .wav do disco)
+    purge-broken [--dry-run]       Remove faixas com títulos corrompidos (caracteres ?)
 """
 
 import argparse
+import logging
 import os
 import sys
 from pathlib import Path
@@ -34,6 +37,36 @@ COLLECTION_NAME = "tracks"
 def get_collection() -> Collection:
     client = MongoClient(MONGO_URI)
     return client[DB_NAME][COLLECTION_NAME]
+
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
+def _setup_logging(script_name: str) -> logging.Logger:
+    logs_dir = Path(__file__).resolve().parent.parent / "logs"
+    logs_dir.mkdir(exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = logs_dir / f"{script_name}_{timestamp}.log"
+
+    _logger = logging.getLogger(script_name)
+    _logger.setLevel(logging.DEBUG)
+
+    file_fmt = logging.Formatter(
+        "%(asctime)s | %(levelname)-8s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    fh = logging.FileHandler(log_file, encoding="utf-8")
+    fh.setFormatter(file_fmt)
+    _logger.addHandler(fh)
+
+    sh = logging.StreamHandler()
+    sh.setFormatter(logging.Formatter("%(message)s"))
+    _logger.addHandler(sh)
+
+    return _logger
+
+
+logger = _setup_logging("mongo_crud")
 
 
 # ---------------------------------------------------------------------------
@@ -60,15 +93,15 @@ def cmd_stats(args, col: Collection) -> None:
     pipeline = [{"$group": {"_id": "$label", "total": {"$sum": 1}}}]
     results = sorted(col.aggregate(pipeline), key=lambda x: x["_id"] or "")
     total = 0
-    print(f"\n{'Label':<20} {'Faixas':>8}")
-    print("-" * 30)
+    logger.info("\n%-20s %8s", "Label", "Faixas")
+    logger.info("-" * 30)
     for r in results:
         label = r["_id"] or "(sem label)"
         count = r["total"]
         total += count
-        print(f"{label:<20} {count:>8}")
-    print("-" * 30)
-    print(f"{'TOTAL':<20} {total:>8}\n")
+        logger.info("%-20s %8d", label, count)
+    logger.info("-" * 30)
+    logger.info("%-20s %8d\n", "TOTAL", total)
 
 
 def cmd_list(args, col: Collection) -> None:
@@ -82,14 +115,14 @@ def cmd_list(args, col: Collection) -> None:
     docs = list(cursor)
 
     if not docs:
-        print("Nenhuma faixa encontrada.")
+        logger.info("Nenhuma faixa encontrada.")
         return
 
-    print(f"\n{len(docs)} faixa(s) encontrada(s):\n")
+    logger.info("\n%d faixa(s) encontrada(s):\n", len(docs))
     for i, doc in enumerate(docs, 1):
-        print(f"[{i}] {doc.get('title', '—')}  |  {doc.get('label', '—')}")
-        print(f"     {doc.get('url', '—')}")
-        print(f"     {doc.get('file_path', '—')}\n")
+        logger.info("[%d] %s  |  %s", i, doc.get("title", "—"), doc.get("label", "—"))
+        logger.info("     %s", doc.get("url", "—"))
+        logger.info("     %s\n", doc.get("file_path", "—"))
 
 
 def cmd_search(args, col: Collection) -> None:
@@ -103,29 +136,29 @@ def cmd_search(args, col: Collection) -> None:
     docs = list(col.find(query, {"_id": 0}).limit(args.limit or 0))
 
     if not docs:
-        print(f'Nenhuma faixa encontrada para "{args.query}".')
+        logger.info('Nenhuma faixa encontrada para "%s".', args.query)
         return
 
-    print(f'\n{len(docs)} resultado(s) para "{args.query}":\n')
+    logger.info('\n%d resultado(s) para "%s":\n', len(docs), args.query)
     for i, doc in enumerate(docs, 1):
-        print(f"[{i}] {doc.get('title', '—')}  |  {doc.get('label', '—')}")
-        print(f"     {doc.get('url', '—')}\n")
+        logger.info("[%d] %s  |  %s", i, doc.get("title", "—"), doc.get("label", "—"))
+        logger.info("     %s\n", doc.get("url", "—"))
 
 
 def cmd_get(args, col: Collection) -> None:
     """Exibe detalhes completos de uma faixa pela URL."""
     doc = col.find_one({"url": args.url}, {"_id": 0})
     if not doc:
-        print(f"Faixa não encontrada: {args.url}")
+        logger.error("Faixa não encontrada: %s", args.url)
         sys.exit(1)
-    print(f"\n{_fmt_doc(doc)}\n")
+    logger.info("\n%s\n", _fmt_doc(doc))
 
 
 def cmd_add(args, col: Collection) -> None:
     """Insere uma faixa manualmente no banco."""
     existing = col.find_one({"url": args.url})
     if existing:
-        print(f"Faixa já existe no banco: {args.url}")
+        logger.warning("Faixa já existe no banco: %s", args.url)
         sys.exit(1)
 
     doc = {
@@ -136,7 +169,7 @@ def cmd_add(args, col: Collection) -> None:
         "downloaded_at": datetime.now(timezone.utc),
     }
     col.insert_one(doc)
-    print(f"\nFaixa adicionada:\n{_fmt_doc(doc)}\n")
+    logger.info("\nFaixa adicionada:\n%s\n", _fmt_doc(doc))
 
 
 def cmd_update(args, col: Collection) -> None:
@@ -150,34 +183,34 @@ def cmd_update(args, col: Collection) -> None:
         updates["file_path"] = args.file_path
 
     if not updates:
-        print("Nenhum campo para atualizar. Use --label, --title ou --file-path.")
+        logger.warning("Nenhum campo para atualizar. Use --label, --title ou --file-path.")
         sys.exit(1)
 
     result = col.update_one({"url": args.url}, {"$set": updates})
     if result.matched_count == 0:
-        print(f"Faixa não encontrada: {args.url}")
+        logger.error("Faixa não encontrada: %s", args.url)
         sys.exit(1)
 
     doc = col.find_one({"url": args.url}, {"_id": 0})
-    print(f"\nFaixa atualizada:\n{_fmt_doc(doc)}\n")
+    logger.info("\nFaixa atualizada:\n%s\n", _fmt_doc(doc))
 
 
 def cmd_delete(args, col: Collection) -> None:
     """Remove uma faixa do banco e, opcionalmente, o arquivo .wav do disco."""
     doc = col.find_one({"url": args.url}, {"_id": 0})
     if not doc:
-        print(f"Faixa não encontrada: {args.url}")
+        logger.error("Faixa não encontrada: %s", args.url)
         sys.exit(1)
 
     # Confirmação interativa
     print(f"\nFaixa a remover:\n{_fmt_doc(doc)}\n")
     confirm = input("Confirmar remoção? [s/N] ").strip().lower()
     if confirm != "s":
-        print("Operação cancelada.")
+        logger.info("Operação cancelada.")
         return
 
     col.delete_one({"url": args.url})
-    print("Faixa removida do banco.")
+    logger.info("Faixa removida do banco.")
 
     if args.delete_file:
         file_path = doc.get("file_path", "")
@@ -185,11 +218,38 @@ def cmd_delete(args, col: Collection) -> None:
             p = Path(file_path)
             if p.exists():
                 p.unlink()
-                print(f"Arquivo removido do disco: {p}")
+                logger.info("Arquivo removido do disco: %s", p)
             else:
-                print(f"Arquivo não encontrado no disco: {p}")
+                logger.warning("Arquivo não encontrado no disco: %s", p)
         else:
-            print("Nenhum file_path registrado para esta faixa.")
+            logger.warning("Nenhum file_path registrado para esta faixa.")
+
+
+def cmd_purge_broken(args, col: Collection) -> None:
+    """Remove faixas com títulos corrompidos (contêm o caractere de substituição Unicode U+FFFD)."""
+    query = {"title": {"$regex": "\ufffd"}}
+    docs = list(col.find(query, {"_id": 0}))
+
+    if not docs:
+        logger.info("Nenhuma faixa com título corrompido encontrada.")
+        return
+
+    logger.info("\n%d faixa(s) com título corrompido:\n", len(docs))
+    for i, doc in enumerate(docs, 1):
+        logger.info("[%d] %s  |  %s", i, doc.get("title", "—"), doc.get("label", "—"))
+        logger.info("     %s\n", doc.get("url", "—"))
+
+    if args.dry_run:
+        logger.info("[DRY-RUN] Nenhuma faixa removida.")
+        return
+
+    confirm = input(f"Remover as {len(docs)} faixa(s) listadas acima? [s/N] ").strip().lower()
+    if confirm != "s":
+        logger.info("Operação cancelada.")
+        return
+
+    result = col.delete_many(query)
+    logger.info("%d faixa(s) removida(s) do banco.", result.deleted_count)
 
 
 # ---------------------------------------------------------------------------
@@ -243,6 +303,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Apaga também o arquivo .wav do disco"
     )
 
+    # purge-broken
+    p_purge = sub.add_parser("purge-broken", help="Remove faixas com títulos corrompidos")
+    p_purge.add_argument(
+        "--dry-run", action="store_true",
+        help="Apenas lista as faixas, sem remover"
+    )
+
     return parser
 
 
@@ -258,6 +325,7 @@ COMMANDS = {
     "add": cmd_add,
     "update": cmd_update,
     "delete": cmd_delete,
+    "purge-broken": cmd_purge_broken,
 }
 
 if __name__ == "__main__":

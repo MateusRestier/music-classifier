@@ -4,6 +4,29 @@ Formato: [MAJOR.MINOR] — descrição das mudanças agrupadas por etapa/sessão
 
 ---
 
+## [0.4] — 2026-03-11 — Etapa 3: Modelagem + Balanceamento de classes
+
+### Adicionado
+- `modeling/cluster.py`: clusterização exploratória
+  - Pipeline: StandardScaler → PCA (95% variância) → K-Means (Elbow + Silhouette k=2..10) → t-SNE
+  - Plots salvos em `modeling/plots/`: `elbow_silhouette.png`, `tsne_k{N}.png`
+  - CLI: `--input`, `--k` (força k), `--output-dir`
+- `modeling/classify.py`: classificação supervisionada
+  - Pipeline: StandardScaler → split 80/20 estratificado → Random Forest + XGBoost
+  - Exporta o melhor modelo (por F1-macro) em `models/classifier.pkl`, `scaler.pkl`, `label_encoder.pkl`
+  - Plots: `confusion_matrix_*.png`, `feature_importance_rf.png`
+  - Resultado inicial: XGBoost F1-macro=0.7256 vs RF F1-macro=0.6624
+- `dsp/extract_features.py`: estratégia de balanceamento de classes (`BALANCE_STRATEGY`)
+  - `none` — processa todas as faixas (padrão)
+  - `undersample` — limita todas as classes ao tamanho da menor (cap = min)
+  - `balance` — limita classes acima da mediana ao valor da mediana; classes menores ficam intactas
+  - Configurável via env `BALANCE_STRATEGY` ou CLI `--balance-strategy` / `-b`
+- `requirements.txt`: adicionado `seaborn>=0.13.0`
+- `.env.example`: adicionada variável `BALANCE_STRATEGY=none` com comentários explicativos
+- `.gitignore`: adicionado `modeling/plots/`
+
+---
+
 ## [0.3] — 2026-03-11 — Checkpoint DSP + Backup/restore do MongoDB
 
 ### Adicionado

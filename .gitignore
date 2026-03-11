@@ -5,6 +5,7 @@ backups/
 *.mp3
 *.parquet
 models/
+modeling/plots/
 __pycache__/
 *.pyc
 .env

@@ -1,4 +1,5 @@
 dataset/
+logs/
 *.wav
 *.mp3
 *.parquet

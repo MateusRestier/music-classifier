@@ -1,0 +1,8 @@
+dataset/
+*.wav
+*.mp3
+*.parquet
+models/
+__pycache__/
+*.pyc
+.env

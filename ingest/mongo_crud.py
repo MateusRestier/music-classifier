@@ -13,11 +13,14 @@ Comandos disponíveis:
     update <url> [--label L] [--title T] [--file-path F]  Atualiza campos de uma faixa
     delete <url> [--delete-file]   Remove faixa do banco (e opcionalmente o .wav do disco)
     purge-broken [--dry-run]       Remove faixas com títulos corrompidos (caracteres ?)
+    dump   [--output DIR]          Exporta o banco para um diretório via mongodump
+    restore <dump_dir> [--drop]    Restaura o banco a partir de um dump via mongorestore
 """
 
 import argparse
 import logging
 import os
+import subprocess
 import sys
 from pathlib import Path
 from datetime import datetime, timezone
@@ -32,6 +35,10 @@ from pymongo.collection import Collection
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://admin:admin123@localhost:27017/")
 DB_NAME = "music_classifier"
 COLLECTION_NAME = "tracks"
+
+_MONGO_TOOLS_BIN = r"C:\Program Files\MongoDB\Tools\100\bin"
+MONGODUMP_PATH    = os.getenv("MONGODUMP_PATH",    rf"{_MONGO_TOOLS_BIN}\mongodump.exe")
+MONGORESTORE_PATH = os.getenv("MONGORESTORE_PATH", rf"{_MONGO_TOOLS_BIN}\mongorestore.exe")
 
 
 def get_collection() -> Collection:
@@ -252,6 +259,66 @@ def cmd_purge_broken(args, col: Collection) -> None:
     logger.info("%d faixa(s) removida(s) do banco.", result.deleted_count)
 
 
+_BACKUPS_DIR = Path(__file__).resolve().parent.parent / "backups"
+
+
+def cmd_dump(args, col: Collection) -> None:
+    """Exporta o banco para um diretório via mongodump."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = Path(args.output) if args.output else _BACKUPS_DIR / f"dump_{timestamp}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    cmd = [MONGODUMP_PATH, "--uri", MONGO_URI, "--authenticationDatabase", "admin",
+           "--db", DB_NAME, "--out", str(output_dir)]
+    logger.info("Executando: %s", " ".join(cmd))
+
+    result = subprocess.run(cmd, capture_output=True)
+    _log_subprocess_output(result)
+
+    if result.returncode != 0:
+        logger.error("mongodump falhou (código %d).", result.returncode)
+        sys.exit(result.returncode)
+
+    logger.info("Backup salvo em: %s", output_dir / DB_NAME)
+
+
+def cmd_restore(args, col: Collection) -> None:
+    """Restaura o banco a partir de um dump via mongorestore."""
+    dump_dir = Path(args.dump_dir)
+
+    # mongodump cria subdiretório com o nome do banco; aceita ambos os formatos
+    db_dir = dump_dir / DB_NAME if (dump_dir / DB_NAME).exists() else dump_dir
+    if not db_dir.exists():
+        logger.error("Diretório de dump não encontrado: %s", dump_dir)
+        sys.exit(1)
+
+    cmd = [MONGORESTORE_PATH, "--uri", MONGO_URI, "--authenticationDatabase", "admin",
+           "--db", DB_NAME]
+    if args.drop:
+        cmd.append("--drop")
+    cmd.append(str(db_dir))
+
+    logger.info("Executando: %s", " ".join(cmd))
+
+    result = subprocess.run(cmd, capture_output=True)
+    _log_subprocess_output(result)
+
+    if result.returncode != 0:
+        logger.error("mongorestore falhou (código %d).", result.returncode)
+        sys.exit(result.returncode)
+
+    logger.info("Banco restaurado com sucesso.")
+
+
+def _log_subprocess_output(result: subprocess.CompletedProcess) -> None:
+    """Loga stdout e stderr de um subprocess (mongodump/mongorestore escrevem em stderr)."""
+    for stream in (result.stdout, result.stderr):
+        if stream:
+            text = stream.decode("utf-8", errors="replace").strip()
+            if text:
+                logger.info(text)
+
+
 # ---------------------------------------------------------------------------
 # Parser
 # ---------------------------------------------------------------------------
@@ -310,6 +377,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Apenas lista as faixas, sem remover"
     )
 
+    # dump
+    p_dump = sub.add_parser("dump", help="Exporta o banco via mongodump")
+    p_dump.add_argument(
+        "--output", "-o",
+        help=f"Diretório de saída (padrão: backups/dump_YYYYMMDD_HHMMSS)"
+    )
+
+    # restore
+    p_restore = sub.add_parser("restore", help="Restaura o banco via mongorestore")
+    p_restore.add_argument("dump_dir", help="Diretório do dump (ex: backups/dump_20260311_150000)")
+    p_restore.add_argument(
+        "--drop", action="store_true",
+        help="Apaga a coleção existente antes de restaurar (evita duplicatas)"
+    )
+
     return parser
 
 
@@ -326,6 +408,8 @@ COMMANDS = {
     "update": cmd_update,
     "delete": cmd_delete,
     "purge-broken": cmd_purge_broken,
+    "dump": cmd_dump,
+    "restore": cmd_restore,
 }
 
 if __name__ == "__main__":

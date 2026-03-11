@@ -158,3 +158,29 @@ if not file_path.is_absolute():
 O fallback para `_PROJECT_ROOT.parent` resolve os dados da execução anterior (em `GIT/dataset/`) sem exigir mover os arquivos.
 
 ---
+
+## [006] mongodump falhando com AuthenticationFailed
+
+**Data:** Etapa 2 — Backup
+**Arquivo:** `ingest/mongo_crud.py` → `cmd_dump()`, `cmd_restore()`
+
+### Sintoma
+```
+Failed: can't create session: failed to connect to mongodb://admin:admin123@localhost:27017/:
+connection() error occurred during connection handshake: auth error: sasl conversation error:
+unable to authenticate using mechanism "SCRAM-SHA-1": (AuthenticationFailed) Authentication failed.
+```
+Mesmo com URI e credenciais corretos (`admin:admin123@localhost:27017`).
+
+### Causa
+O usuário `admin` é criado no banco `admin` (banco de autenticação padrão do MongoDB). O `mongodump`/`mongorestore` não infere automaticamente o banco de autenticação a partir da URI quando o usuário está em `admin` mas o `--db` alvo é outro banco.
+
+### Solução
+Passar `--authenticationDatabase admin` explicitamente no comando:
+
+```python
+cmd = [MONGODUMP_PATH, "--uri", MONGO_URI, "--authenticationDatabase", "admin",
+       "--db", DB_NAME, "--out", str(output_dir)]
+```
+
+---

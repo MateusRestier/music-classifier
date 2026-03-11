@@ -50,6 +50,7 @@ HOP_LENGTH = 512
 
 DEFAULT_OUTPUT = Path(__file__).resolve().parent.parent / "features.parquet"
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "4"))
+CHECKPOINT_EVERY = int(os.getenv("CHECKPOINT_EVERY", "50"))
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +199,21 @@ def _process_track(track: dict) -> dict | None:
     }
 
 
-def run_extraction(output_path: Path, max_workers: int) -> None:
+def _flush_checkpoint(
+    rows: list, base_df: "pd.DataFrame | None", output_path: Path
+) -> None:
+    """
+    Salva o parquet de forma atômica (escreve em .tmp e renomeia).
+    Concatena base_df (linhas pré-existentes) com rows (novas nesta sessão).
+    """
+    new_df = pd.DataFrame(rows)
+    final_df = pd.concat([base_df, new_df], ignore_index=True) if base_df is not None else new_df
+    tmp = output_path.with_suffix(".tmp.parquet")
+    final_df.to_parquet(tmp, index=False)
+    tmp.replace(output_path)  # renomeio atômico — não corrompe o parquet se interrompido
+
+
+def run_extraction(output_path: Path, max_workers: int, checkpoint_every: int) -> None:
     """Pipeline principal: lê MongoDB → extrai features → salva parquet."""
     client = MongoClient(MONGO_URI)
     collection = client[DB_NAME][COLLECTION_NAME]
@@ -208,27 +223,28 @@ def run_extraction(output_path: Path, max_workers: int) -> None:
 
     # Incremental: pula faixas já presentes no parquet existente
     if output_path.exists():
-        existing = pd.read_parquet(output_path, columns=["file_path"])
-        done_paths = set(existing["file_path"].tolist())
+        base_df = pd.read_parquet(output_path)
+        done_paths = set(base_df["file_path"].tolist())
         pending = [t for t in all_tracks if t["file_path"] not in done_paths]
         logger.info(
             "[INFO] %d já processada(s), %d na fila.",
             len(done_paths), len(pending),
         )
     else:
+        base_df = None
         pending = all_tracks
-        done_paths = set()
 
     if not pending:
         logger.info("Nenhuma faixa nova para processar.")
         return
 
     logger.info(
-        "\n[START] Extraindo features de %d faixa(s) com %d workers...\n",
-        len(pending), max_workers,
+        "\n[START] Extraindo features de %d faixa(s) com %d workers "
+        "(checkpoint a cada %d)...\n",
+        len(pending), max_workers, checkpoint_every,
     )
 
-    rows = []
+    rows: list = []
     done = errors = 0
     total = len(pending)
 
@@ -254,25 +270,22 @@ def run_extraction(output_path: Path, max_workers: int) -> None:
                 done + errors, total, errors, track["title"],
             )
 
+            # Checkpoint periódico
+            if done > 0 and done % checkpoint_every == 0:
+                _flush_checkpoint(rows, base_df, output_path)
+                logger.info("  [CKPT] Checkpoint salvo (%d novas faixas acumuladas).", done)
+
     if not rows:
         logger.warning("Nenhuma feature extraída. Verifique os arquivos .wav.")
         return
 
-    new_df = pd.DataFrame(rows)
-
-    # Concatena com o parquet existente se houver
-    if output_path.exists() and done_paths:
-        existing_df = pd.read_parquet(output_path)
-        final_df = pd.concat([existing_df, new_df], ignore_index=True)
-    else:
-        final_df = new_df
-
-    final_df.to_parquet(output_path, index=False)
+    _flush_checkpoint(rows, base_df, output_path)
+    final_rows = (len(base_df) if base_df is not None else 0) + len(rows)
     logger.info(
         "\nConcluído. %d extraída(s), %d erro(s). Parquet salvo em: %s",
         done, errors, output_path,
     )
-    logger.info("Shape final: %d linhas × %d colunas.", *final_df.shape)
+    logger.info("Shape final: %d linhas × 372 colunas.", final_rows)
 
 
 # ---------------------------------------------------------------------------
@@ -292,9 +305,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--output", "-o", type=Path, default=DEFAULT_OUTPUT,
         help=f"Caminho do arquivo de saída (padrão: {DEFAULT_OUTPUT})",
     )
+    parser.add_argument(
+        "--checkpoint-every", "-c", type=int, default=CHECKPOINT_EVERY,
+        help=f"Salvar parquet a cada N faixas extraídas (padrão: {CHECKPOINT_EVERY}, env: CHECKPOINT_EVERY)",
+    )
     return parser
 
 
 if __name__ == "__main__":
     args = build_parser().parse_args()
-    run_extraction(output_path=args.output, max_workers=args.workers)
+    run_extraction(output_path=args.output, max_workers=args.workers,
+                   checkpoint_every=args.checkpoint_every)

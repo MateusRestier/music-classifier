@@ -2,10 +2,16 @@
 extract_features.py — Extração de features de áudio via librosa.
 
 Uso:
-    python dsp/extract_features.py [--workers N] [--output PATH]
+    python dsp/extract_features.py [--workers N] [--output PATH] [--balance-strategy S]
 
 Lê os caminhos dos arquivos .wav do MongoDB, extrai features numéricas
 e salva um DataFrame em features.parquet (uma linha por faixa).
+
+Estratégias de balanceamento (BALANCE_STRATEGY no .env ou --balance-strategy):
+    none         Processa todas as faixas (padrão)
+    undersample  Limita todas as classes ao tamanho da menor classe
+    balance      Limita classes acima da mediana ao valor da mediana;
+                 classes abaixo da mediana ficam intactas
 
 Features extraídas (por segmento de 30s, resumidas com mean + std):
     MFCCs (40 coef.)           → mean + std  (80 colunas)
@@ -23,6 +29,8 @@ Features extraídas (por segmento de 30s, resumidas com mean + std):
 import argparse
 import logging
 import os
+import random
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -51,6 +59,7 @@ HOP_LENGTH = 512
 DEFAULT_OUTPUT = Path(__file__).resolve().parent.parent / "features.parquet"
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "4"))
 CHECKPOINT_EVERY = int(os.getenv("CHECKPOINT_EVERY", "50"))
+BALANCE_STRATEGY = os.getenv("BALANCE_STRATEGY", "none")  # none | undersample | balance
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +176,46 @@ def get_tracks(collection: Collection) -> list[dict]:
     ))
 
 
+def _apply_balance_strategy(tracks: list[dict], strategy: str) -> list[dict]:
+    """
+    Filtra a lista de faixas conforme a estratégia de balanceamento.
+
+    none        — retorna tudo sem alteração
+    undersample — limita cada classe ao tamanho da menor classe (cap = min)
+    balance     — limita classes acima da mediana ao valor da mediana;
+                  classes abaixo da mediana ficam intactas
+                  (reduz outliers sem penalizar as classes menores)
+    """
+    if strategy == "none":
+        return tracks
+
+    by_label: dict[str, list] = defaultdict(list)
+    for t in tracks:
+        by_label[t["label"]].append(t)
+
+    counts = sorted(len(v) for v in by_label.values())
+
+    if strategy == "undersample":
+        cap = counts[0]
+    elif strategy == "balance":
+        n = len(counts)
+        cap = counts[n // 2] if n % 2 == 1 else counts[n // 2 - 1]  # mediana
+    else:
+        raise ValueError(
+            f"BALANCE_STRATEGY inválido: {strategy!r}. Use: none, undersample, balance"
+        )
+
+    logger.info("[BALANCE] Estratégia: %s | cap = %d faixas/classe", strategy, cap)
+    result: list[dict] = []
+    for label, items in sorted(by_label.items()):
+        selected = random.sample(items, min(len(items), cap))
+        logger.info("  %-15s %d → %d", label, len(items), len(selected))
+        result.extend(selected)
+
+    logger.info("  Total: %d → %d faixas selecionadas\n", len(tracks), len(result))
+    return result
+
+
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -213,13 +262,17 @@ def _flush_checkpoint(
     tmp.replace(output_path)  # renomeio atômico — não corrompe o parquet se interrompido
 
 
-def run_extraction(output_path: Path, max_workers: int, checkpoint_every: int) -> None:
-    """Pipeline principal: lê MongoDB → extrai features → salva parquet."""
+def run_extraction(
+    output_path: Path, max_workers: int, checkpoint_every: int, balance_strategy: str
+) -> None:
+    """Pipeline principal: lê MongoDB → aplica balanceamento → extrai features → salva parquet."""
     client = MongoClient(MONGO_URI)
     collection = client[DB_NAME][COLLECTION_NAME]
 
     all_tracks = get_tracks(collection)
     logger.info("[INFO] %d faixa(s) encontrada(s) no banco.", len(all_tracks))
+
+    all_tracks = _apply_balance_strategy(all_tracks, balance_strategy)
 
     # Incremental: pula faixas já presentes no parquet existente
     if output_path.exists():
@@ -309,10 +362,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--checkpoint-every", "-c", type=int, default=CHECKPOINT_EVERY,
         help=f"Salvar parquet a cada N faixas extraídas (padrão: {CHECKPOINT_EVERY}, env: CHECKPOINT_EVERY)",
     )
+    parser.add_argument(
+        "--balance-strategy", "-b", default=BALANCE_STRATEGY,
+        choices=["none", "undersample", "balance"],
+        help=f"Estratégia de balanceamento de classes (padrão: {BALANCE_STRATEGY}, env: BALANCE_STRATEGY)",
+    )
     return parser
 
 
 if __name__ == "__main__":
     args = build_parser().parse_args()
-    run_extraction(output_path=args.output, max_workers=args.workers,
-                   checkpoint_every=args.checkpoint_every)
+    run_extraction(
+        output_path=args.output,
+        max_workers=args.workers,
+        checkpoint_every=args.checkpoint_every,
+        balance_strategy=args.balance_strategy,
+    )

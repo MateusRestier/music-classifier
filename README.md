@@ -69,6 +69,24 @@ python ingest/ingest.py
 
 Os arquivos `.wav` serão salvos em `dataset/<label>/` e os metadados no MongoDB.
 
+### 5. Extrair features de áudio
+
+Com o dataset ingerido, execute a extração de features DSP:
+
+```bash
+python dsp/extract_features.py
+```
+
+O script lê os caminhos do MongoDB, processa cada `.wav` em paralelo e salva `features.parquet` na raiz do projeto.
+
+**Opções:**
+```bash
+python dsp/extract_features.py --workers 6   # aumentar paralelismo (padrão: 4)
+python dsp/extract_features.py --output outro/caminho.parquet
+```
+
+A extração é **incremental**: se `features.parquet` já existir, apenas as faixas novas são processadas.
+
 ---
 
 ## Estrutura do Projeto
@@ -76,11 +94,14 @@ Os arquivos `.wav` serão salvos em `dataset/<label>/` e os metadados no MongoDB
 ```
 music-classifier/
 ├── dataset/                  # áudios .wav (gitignored)
+├── logs/                     # logs dos scripts (gitignored)
 ├── docs/
 │   └── visao_do_projeto.md   # arquitetura e roadmap
 ├── ingest/
-│   └── ingest.py             # download + MongoDB
-├── dsp/                      # extração de features (Etapa 2)
+│   ├── ingest.py             # download + MongoDB
+│   └── mongo_crud.py         # CLI CRUD do banco
+├── dsp/
+│   └── extract_features.py   # extração de features via librosa
 ├── modeling/                 # ML (Etapa 3)
 ├── app/                      # Streamlit (Etapa 4)
 ├── docker-compose.yml

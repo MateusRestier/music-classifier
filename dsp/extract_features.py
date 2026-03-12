@@ -35,6 +35,8 @@ import argparse
 import logging
 import os
 import random
+from dotenv import load_dotenv
+load_dotenv()
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime

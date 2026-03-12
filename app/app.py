@@ -11,6 +11,8 @@ Requer que os modelos já tenham sido treinados e exportados em models/:
 import os
 import re
 import shutil
+from dotenv import load_dotenv
+load_dotenv()
 import subprocess
 import sys
 import tempfile

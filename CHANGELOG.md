@@ -4,6 +4,14 @@ Formato: [MAJOR.MINOR] — descrição das mudanças agrupadas por etapa/sessão
 
 ---
 
+## [1.0] — 2026-03-12 — Suporte a .env via python-dotenv
+
+### Adicionado
+- `requirements.txt`: `python-dotenv>=1.0.0`
+- `dsp/extract_features.py`, `ingest/ingest.py`, `ingest/mongo_crud.py`, `app/app.py`: `load_dotenv()` no topo — variáveis do `.env` (como `BALANCE_STRATEGY`) agora são lidas automaticamente sem precisar exportar no shell
+
+---
+
 ## [0.9] — 2026-03-12 — Revisão da documentação
 
 ### Alterado

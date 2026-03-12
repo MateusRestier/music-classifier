@@ -80,26 +80,82 @@ logger = _setup_logging("ingest")
 
 CATALOG: dict[str, list[dict]] = {
     "metalcore": [
-        {"playlist": "https://www.youtube.com/playlist?list=PL7v1FHGMOadBTndBvtY4h213M10Pl9Y1c"},
-        {"playlist": "https://www.youtube.com/playlist?list=PLhcGuOPZJV3yFcf6nXqTS22aq65yawRs1"},
+        {"playlist": "https://www.youtube.com/playlist?list=PL7v1FHGMOadBTndBvtY4h213M10Pl9Y1c"}, # 98
+        {"playlist": "https://www.youtube.com/playlist?list=PLhcGuOPZJV3yFcf6nXqTS22aq65yawRs1"}, # 50
     ],
     "nu_metal": [
-        {"playlist": "https://www.youtube.com/playlist?list=PLf5aYiZPCNE0lnWZmC_pI6mtzyBS83Px1"},
+        {"playlist": "https://www.youtube.com/playlist?list=PLf5aYiZPCNE0lnWZmC_pI6mtzyBS83Px1"}, # 412
+    ],
+    "alternative_rock": [
+        {"playlist": "https://www.youtube.com/playlist?list=PLOhV0FrFphUfHqxfhIBju7zu_2CTqG01F"}, # 210
+    ],
+    "heavy_metal": [
+        {"playlist": "https://www.youtube.com/playlist?list=PLmXxqSJJq-yUwqtbp8MHBoTDoDULMoViq"}, # 135
+    ],
+    "punk_rock": [
+        {"playlist": "https://www.youtube.com/playlist?list=PLztPI1ESxz5DmDh77Wy7VjumrnnIo6xyT"}, #96
+        {"playlist": "https://www.youtube.com/playlist?list=PLyYSaNJm9DA_W3nklWZXZ3mk1XNWBwkun"}, #62
     ],
     "sertanejo": [
-        # Playlists com sucessos do Sertanejo e Sertanejo Universitário
-        {"playlist": "https://www.youtube.com/playlist?list=PLCwAHfhr-Gc_wCv4yrPBiZFFyaRDMraMl"},
-        {"playlist": "https://www.youtube.com/playlist?list=PL_Q15fKxrBb7QRCHi9uaeLOuAppg5Ebbg"},
+        {"playlist": "https://www.youtube.com/playlist?list=PLCwAHfhr-Gc_wCv4yrPBiZFFyaRDMraMl"}, # 100
+        {"playlist": "https://www.youtube.com/playlist?list=PL_Q15fKxrBb7QRCHi9uaeLOuAppg5Ebbg"}, # 150
+    ],
+    "samba": [
+        {"playlist": "https://www.youtube.com/playlist?list=PLUSMU5cINML8cu_O8adqbC5eaSvmceYt3"}, # 12
+        {"playlist": "https://www.youtube.com/playlist?list=PLBLhTLhdFwrGo4dnTaeSC17rq_ggtrkCx"}, # 79
     ],
     "pagode": [
-        # Playlists focadas em rodas de Pagode e sucessos históricos
-        {"playlist": "https://www.youtube.com/playlist?list=PLCwAHfhr-Gc_Ra3WPBZZDdzS1MNRgO1lq"},
-        {"playlist": "https://www.youtube.com/playlist?list=PL_Q15fKxrBb5pckIW2RHwZbgf-FwRiCWr"},
+        {"playlist": "https://www.youtube.com/playlist?list=PLCwAHfhr-Gc_Ra3WPBZZDdzS1MNRgO1lq"}, # 150
+        {"playlist": "https://www.youtube.com/playlist?list=PL_Q15fKxrBb5pckIW2RHwZbgf-FwRiCWr"}, # 99
     ],
     "pop": [
-        # Playlists gigantescas com os maiores hits Pop globais
-        {"playlist": "https://www.youtube.com/playlist?list=PLplXQ2cg9B_qrCVd1J_iId5SvP8Kf_BfS"},
-    ]
+        {"playlist": "https://www.youtube.com/playlist?list=PLplXQ2cg9B_qrCVd1J_iId5SvP8Kf_BfS"}, # 210
+    ],
+    "kpop": [
+        {"playlist": "https://www.youtube.com/playlist?list=PLbxr0tBuEEpF1PFiDIwUkdDR5dsfx1ZUr"}, # 198
+    ],
+    "funk": [
+        {"playlist": "https://www.youtube.com/playlist?list=PLJn4hP4ODKFxzVT-TIoAGYDlIrFVLZFWR"}, # 72
+        {"playlist": "https://www.youtube.com/playlist?list=PLEGWXxQHuVpqOP3YR4KQOkCNMweUEzzJf"}, # 71
+    ],
+    "mpb": [
+        {"playlist": "https://www.youtube.com/playlist?list=PL_Q15fKxrBb7C163SjzBIPYMrGcNzb_-X"}, # 100
+        {"playlist": "https://www.youtube.com/playlist?list=PLWWhu0Ph3X5gZPSnXaNbVMn6GbwCu-AH7"}, # 100
+    ],
+    "classica": [
+        {"playlist": "https://www.youtube.com/playlist?list=PLenGc88ZarjddtzPtQwL_hlbcrkmQ85ye"}, # 89
+        {"playlist": "https://www.youtube.com/playlist?list=PL2788304DC59DBEB4"}, # 38
+    ],
+    "opera": [
+        {"playlist": "https://www.youtube.com/playlist?list=PLDBt7LIJrBCVjfCZnQxBqnMtQ74IJW0uT"}, # 26
+        {"playlist": "https://www.youtube.com/playlist?list=PLOwSo8kHs4XT4Hx7OufxbXJLestNUWg7F"}, # 50
+    ],
+    "edm": [
+        {"playlist": "https://www.youtube.com/playlist?list=PL3oW2tjiIxvQ60uIjLdo7vrUe4ukSpbKl"}, # 40
+        {"playlist": "https://www.youtube.com/playlist?list=PLRkof_jJmKXO9Tj11tJuzt6MWWKuhjHYB"}, # 148
+    ],
+    "forro": [
+        {"playlist": "https://www.youtube.com/playlist?list=PLz5qkjG8i6lP0xvJNUF_F1NGcNjmyEQ6Z"}, # 260
+    ],
+    "axe": [
+        {"playlist": "https://www.youtube.com/playlist?list=PLFtsMqiDcqt0v_gcgX01-ipIHU_81rK8G"}, # 253
+    ],
+    "jazz": [
+        {"playlist": "https://www.youtube.com/playlist?list=PL8F6B0753B2CCA128"}, # 279
+    ],
+    "lo-fi": [
+        {"playlist": "https://www.youtube.com/playlist?list=PL6fhs6TSspZv0F0YgsG-p7Mn189CU2XKS"}, # 321
+    ],
+    "reggae": [
+        {"playlist": "https://www.youtube.com/playlist?list=PLB8HqqmpyIBcAHYt_w15AprSLViIGrToO"}, # 60
+        {"playlist": "https://www.youtube.com/playlist?list=PLw7aLrPJ8Hl24kczxvRoPECfTvAMsOwv1"}, # 74
+    ],
+    "rap": [
+        {"playlist": "https://www.youtube.com/playlist?list=PLwNv9Hhd8gZjeee8SBwokNf2JhqBvYqeB"},# 600
+    ],
+    "trap": [
+        {"playlist": "https://www.youtube.com/playlist?list=PLQEUs9xtYT6o8QYY-NYg5hRuX-8fLrcy3"}, # 180
+    ],
 }
 
 

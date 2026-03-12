@@ -2,6 +2,8 @@
 
 Pipeline ponta a ponta para classificação e clusterização de gêneros musicais — da ingestão via YouTube até um app Streamlit com análise espectral e predição por ML.
 
+![Painel principal do SoundDNA](img/painel_principal.png)
+
 Veja [docs/visao_do_projeto.md](docs/visao_do_projeto.md) para a arquitetura completa.
 
 ---
@@ -129,6 +131,7 @@ sound-dna/
 ├── dataset/                  # áudios .wav (gitignored)
 ├── models/                   # modelos treinados .pkl (gitignored)
 ├── logs/                     # logs dos scripts (gitignored)
+├── img/                      # screenshots do app
 ├── docs/
 │   ├── visao_do_projeto.md   # arquitetura e decisões de design
 │   └── troubleshooting.md    # problemas encontrados e soluções

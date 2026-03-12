@@ -4,6 +4,34 @@ Formato: [MAJOR.MINOR] — descrição das mudanças agrupadas por etapa/sessão
 
 ---
 
+## [0.9] — 2026-03-12 — Revisão da documentação
+
+### Alterado
+- `README.md`: reescrito completo — pipeline de 8 etapas (inclui Streamlit), comandos do `mongo_crud.py`, opções de `extract_features.py`, estrutura de pastas atualizada (`sound-dna/`, `models/`, `docs/troubleshooting.md`)
+- `docs/visao_do_projeto.md`: atualizado para refletir o estado atual do projeto
+  - Etapa 1: removidos sufixos `_real`/`_ia` (nunca usados); tabela com os 22 gêneros do CATALOG
+  - Etapa 2: tabela de features com dimensionalidade explícita por grupo (total 369)
+  - Etapa 3: resultado real documentado (XGBoost F1=0.7256, fraqueza metalcore recall=36%)
+  - Etapa 4: marcada como ✅ concluída com funcionalidades reais descritas
+  - Decisões de Design: rationale dos labels sem acento e do `DB_NAME` mantido
+
+---
+
+## [0.8] — 2026-03-12 — Expansão do CATALOG (22 gêneros)
+
+### Adicionado
+- `ingest/ingest.py`: CATALOG expandido de 5 para 22 gêneros com playlists preenchidas
+  - Novos gêneros: `alternative_rock`, `heavy_metal`, `punk_rock`, `samba`, `kpop`, `funk`, `mpb`, `classica`, `opera`, `edm`, `forro`, `axe`, `jazz`, `lo-fi`, `reggae`, `rap`, `trap`
+
+### Alterado
+- Família rock reestruturada por clusters acústicos: `post_hardcore` e `progressive_metal` removidos (absorvidos por `metalcore` e `heavy_metal` respectivamente); `alternative_rock` adicionado
+- Labels normalizados para snake_case sem acentos e sem caracteres especiais:
+  - `"clássica"` → `"classica"`, `"ópera"` → `"opera"`, `"forró"` → `"forro"`, `"axé"` → `"axe"`
+  - `"Electronic/EDM"` → `"edm"` *(bug: `/` criaria subdiretório no filesystem)*
+  - `"funk_carioca"` → `"funk"`
+
+---
+
 ## [0.7] — 2026-03-12 — Rename para SoundDNA
 
 ### Alterado

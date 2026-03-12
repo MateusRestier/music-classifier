@@ -325,7 +325,7 @@ def _log_subprocess_output(result: subprocess.CompletedProcess) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="CRUD de faixas no MongoDB do music-classifier.",
+        description="CRUD de faixas no MongoDB do SoundDNA.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sub = parser.add_subparsers(dest="command", required=True)

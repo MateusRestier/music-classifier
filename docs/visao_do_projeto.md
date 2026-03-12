@@ -1,4 +1,4 @@
-# Visão do Projeto — Music Classifier
+# Visão do Projeto — SoundDNA
 
 ## Objetivo
 

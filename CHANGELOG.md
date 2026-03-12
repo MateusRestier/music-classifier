@@ -1,6 +1,36 @@
-# Changelog — Music Classifier
+# Changelog — SoundDNA
 
 Formato: [MAJOR.MINOR] — descrição das mudanças agrupadas por etapa/sessão.
+
+---
+
+## [0.7] — 2026-03-12 — Rename para SoundDNA
+
+### Alterado
+- Projeto renomeado de `music-classifier` para **SoundDNA** (repositório GitHub: `sound-dna`)
+- Atualizado nome em: `README.md`, `CHANGELOG.md`, `docs/visao_do_projeto.md`, `docs/troubleshooting.md`, `app/app.py` (`page_title` + `st.title`), `dsp/extract_features.py` (comentário + CLI description), `ingest/mongo_crud.py` (CLI description)
+- `DB_NAME = "music_classifier"` mantido para preservar compatibilidade com o banco MongoDB existente
+
+---
+
+## [0.6] — 2026-03-12 — Etapa 4: App Streamlit (SoundDNA)
+
+### Adicionado
+- `app/app.py`: aplicação Streamlit completa com duas abas de entrada
+  - **Aba "Upload"**: aceita `.mp3` ou `.wav`; player de áudio nativo do Streamlit
+  - **Aba "YouTube"**: cola URL de vídeo → yt-dlp baixa para WAV temporário → mesmo pipeline
+  - Validação de URL YouTube via regex; mensagem de erro amigável; `shutil.rmtree` no `finally`
+- Métricas rápidas (4 colunas): duração do segmento, BPM estimado, tonalidade (chroma dominante), energia RMS média
+- 5 abas de análise de sinal:
+  - **Forma de onda**: amplitude × tempo com beats marcados (Plotly, interativo; downsample automático a 8 000 pts)
+  - **Mel-Spectrogram**: tempo × frequência Mel em dB, colormap `magma` (matplotlib + librosa)
+  - **MFCCs**: heatmap 40 coeficientes × tempo, colormap `coolwarm` (matplotlib + librosa)
+  - **Chroma**: energia por classe de pitch (C…B) × tempo, colormap `YlOrRd` (matplotlib + librosa)
+  - **Features espectrais**: 4 subplots Plotly interativos — centróide, rolloff, ZCR e RMS quadro a quadro
+- Predição de gênero (3 colunas): métricas de 1º e 2º mais prováveis + bar chart + radar chart (Plotly)
+- `_compute_analysis(y, sr)`: todas as matrizes e features computadas uma única vez e reutilizadas
+- `load_models()`: `@st.cache_resource` — modelos carregados uma única vez por sessão
+- Layout `wide` para melhor aproveitamento do espaço dos gráficos
 
 ---
 

@@ -242,7 +242,7 @@ def _process_track(track: dict) -> dict | None:
     file_path = Path(track["file_path"])
     if not file_path.is_absolute():
         # Tenta resolver relativo à raiz do projeto; fallback para o diretório pai
-        # (caso o ingest tenha sido rodado de fora da pasta music-classifier/)
+        # (caso o ingest tenha sido rodado de fora da pasta sound-dna/)
         candidate = _PROJECT_ROOT / file_path
         if not candidate.exists():
             candidate = _PROJECT_ROOT.parent / file_path
@@ -371,7 +371,7 @@ def run_extraction(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Extração de features de áudio para o music-classifier.",
+        description="Extração de features de áudio para o SoundDNA.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(

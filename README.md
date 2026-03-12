@@ -1,4 +1,4 @@
-# music-classifier
+# SoundDNA
 
 Pipeline ponta a ponta para classificação e clusterização de gêneros musicais.
 

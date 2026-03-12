@@ -1,4 +1,4 @@
-# Troubleshooting — Music Classifier
+# Troubleshooting — SoundDNA
 
 Registro de problemas encontrados durante o desenvolvimento, com causa raiz e solução aplicada.
 

@@ -39,13 +39,7 @@ DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "plots"
 
 META_COLS = {"file_path", "label", "title", "url"}
 
-LABEL_COLORS = {
-    "metalcore": "#e74c3c",
-    "nu_metal":  "#e67e22",
-    "pagode":    "#2ecc71",
-    "pop":       "#3498db",
-    "sertanejo": "#9b59b6",
-}
+# Cores geradas dinamicamente no run_clustering() a partir dos labels presentes no parquet
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -153,14 +147,18 @@ def run_clustering(input_path: Path, output_dir: Path, k_forced: int | None) -> 
     axes[0].set_title(f"t-SNE — Clusters K-Means (k={best_k})")
     axes[0].legend(markerscale=2, fontsize=8)
 
-    # Por label real
-    for lbl, color in LABEL_COLORS.items():
+    # Por label real — cores geradas automaticamente para todos os gêneros presentes
+    unique_labels = sorted(labels.unique())
+    label_colors = {
+        lbl: plt.cm.tab20(i / max(len(unique_labels) - 1, 1))
+        for i, lbl in enumerate(unique_labels)
+    }
+    for lbl, color in label_colors.items():
         mask = labels == lbl
-        if mask.any():
-            axes[1].scatter(X_2d[mask, 0], X_2d[mask, 1],
-                            color=color, label=lbl, s=10, alpha=0.7)
+        axes[1].scatter(X_2d[mask, 0], X_2d[mask, 1],
+                        color=color, label=lbl, s=10, alpha=0.7)
     axes[1].set_title("t-SNE — Labels reais")
-    axes[1].legend(markerscale=2, fontsize=8)
+    axes[1].legend(markerscale=2, fontsize=7, ncol=2)
 
     fig.tight_layout()
     tsne_path = output_dir / f"tsne_k{best_k}.png"

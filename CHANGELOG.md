@@ -4,6 +4,21 @@ Formato: [MAJOR.MINOR] — descrição das mudanças agrupadas por etapa/sessão
 
 ---
 
+## [1.2] — 2026-03-12 — Screenshot no README
+
+### Adicionado
+- `img/painel_principal.png`: screenshot do app exibido no README
+- `README.md`: imagem do painel principal logo após o título; `img/` adicionado à estrutura de pastas
+
+---
+
+## [1.1] — 2026-03-12 — Fix t-SNE: todos os gêneros no plot de labels reais
+
+### Corrigido
+- `modeling/cluster.py`: `LABEL_COLORS` hardcoded com 5 gêneros substituído por geração dinâmica via `plt.cm.tab20` — todos os gêneros presentes no parquet agora aparecem no plot; legenda em 2 colunas (`ncol=2`) para 22 labels
+
+---
+
 ## [1.0] — 2026-03-12 — Suporte a .env via python-dotenv
 
 ### Adicionado
